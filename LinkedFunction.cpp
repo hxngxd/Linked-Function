@@ -1,36 +1,30 @@
 #include "LinkedFunction.h"
+#include <iostream>
+
+uint32_t GetMS()
+{
+    static const auto start = std::chrono::high_resolution_clock::now();
+    const auto now = std::chrono::high_resolution_clock::now();
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
+    return duration.count();
+}
 
 std::set<LinkedFunction *> LinkedFunction::Functions;
 
-FunctionNode::FunctionNode(std::function<bool()> func, Uint32 delay = 0, Uint32 repeat = 1)
+FunctionNode::FunctionNode(std::function<bool()> work, uint8_t type, uint32_t delay, uint32_t t) : type(type), delay(delay), work(work)
 {
-    this->func = func;
-    this->delay = delay;
-    this->duration = duration;
-    this->repeat = repeat;
-    this->next = nullptr;
+    if (type)
+        this->repeat = t;
 }
 
-LinkedFunction::LinkedFunction(std::function<bool()> func, Uint32 delay, Uint32 duration, Uint32 repeat)
+LinkedFunction::LinkedFunction()
 {
     head = tail = nullptr;
-    Next(func, delay, duration, repeat);
-}
-
-LinkedFunction::LinkedFunction(FunctionNode *fn)
-{
-    head = tail = nullptr;
-    Next(fn);
 }
 
 LinkedFunction::~LinkedFunction()
 {
-}
-
-void LinkedFunction::Next(std::function<bool()> func, Uint32 delay, Uint32 duration, Uint32 repeat)
-{
-    FunctionNode *fn = new FunctionNode(func, delay, duration, repeat);
-    Next(fn);
+    std::cout << "finished" << std::endl;
 }
 
 void LinkedFunction::Next(FunctionNode *fn)
@@ -39,9 +33,7 @@ void LinkedFunction::Next(FunctionNode *fn)
         return;
 
     if (!head)
-    {
         head = tail = fn;
-    }
     else
     {
         tail->next = fn;
@@ -66,56 +58,57 @@ void LinkedFunction::Update()
     for (auto it = Functions.begin(); it != Functions.end();)
     {
         LinkedFunction *lf = *it;
-        if (!lf->head)
+
+        if (!lf || !lf->head)
         {
-            Functions.erase(it++);
+            it = Functions.erase(it);
             continue;
         }
 
         FunctionNode *fn = lf->head;
-        if (fn->duration)
+
+        bool done = false;
+        if (GetMS() - lf->start >= fn->delay)
         {
-            if (GetMS() - lf->start <= fn->duration)
+            if (!fn->type)
             {
-                fn->func();
+                if (!fn->work())
+                    done = true;
             }
-            else
+            else if (fn->type == 1)
             {
-                delete fn;
-                lf->head = lf->head->next;
+                if (fn->repeat > 0)
+                {
+                    fn->work();
+                    fn->repeat--;
+                }
+                else
+                    done = true;
+            }
+            else if (fn->type == 2)
+            {
+                if (GetMS() - lf->start <= fn->repeat + fn->delay)
+                    fn->work();
+                else
+                    done = true;
             }
         }
-        // else
-        // {
-        //     if (GetMS() - fn->start < fn->delay)
-        //         continue;
-        // }
-        // if (GetMS() - fn->start >= fn->delay)
-        // {
-        //     if (fn->func())
-        //     {
-        //         if (fn->repeat == 0)
-        //         {
-        //             delete fn;
-        //             lf->head = lf->head->next;
-        //         }
-        //         else
-        //         {
-        //             if (fn->repeat > 0)
-        //                 --fn->repeat;
-        //             fn->start = GetMS();
-        //         }
-        //     }
-        //     else
-        //     {
-        //         delete fn;
-        //         lf->head = lf->head->next;
-        //     }
-        // }
 
-        // if (!lf->head)
-        //     Functions.erase(it++);
-        // else
-        //     ++it;
+        if (done)
+        {
+            lf->start = GetMS();
+            lf->head = lf->head->next;
+            delete fn;
+            fn = nullptr;
+        }
+
+        if (!lf->head)
+        {
+            delete lf;
+            lf = nullptr;
+            it = Functions.erase(it);
+        }
+        else
+            it++;
     }
 }
